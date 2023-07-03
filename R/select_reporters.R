@@ -2,17 +2,18 @@
 
 # Info
 # --------------------------------------------------
-# This script will filter and remove candidate reporter variants based on filtering criteria.
+# This script will filter and remove candidate reporter variants based on filtering criteria based on Vardict output.
 # It will then remove candidates that are present in germline.
 #
 # Input files are 
-# 1) germline bam file
-# 2) followup bam file 
-# 3) vcf table reporter list
+# 1) germline bam file.
+# 2) followup bam file .
+# 3) vcf table reporter list.
 #
 # Output files are 
-# 1) a filtered list of final reporter candidates.
-# 2) an annotated list of all reporter candidates. 
+# 1) a filtered list of final selected reporter candidates.
+# 2) a filtered list of final selected reporter candidates in vcf format.
+# 3) an annotated list of all reporter candidates. 
 
 suppressPackageStartupMessages({
     library(purrr)
@@ -25,8 +26,8 @@ suppressPackageStartupMessages({
 # Options
 # --------------------------------------------------
 option_list <- list(
-    make_option(c("--filter_reporters"), action="store", type="logical", default=TRUE, help="Filters out reporters using metrics from Vardict. Default=TRUE. Set to FALSE to turn off."),
-    make_option(c("--remove_snp"), action="store", type="logical", default=TRUE, help="Filters out reporters if labeled as common SNP. Default=TRUE. Set to FALSE to turn off."),
+    make_option(c("--filter_reporters"), type="logical", default=TRUE, help="Filters out reporters using metrics from Vardict. Default=TRUE. Set to FALSE to turn off."),
+    make_option(c("--remove_snp"), type="logical", default=TRUE, help="Filters out reporters if annotated with DBSNP_COMMON. Default=TRUE. Set to FALSE to turn off."),
     make_option(c("--reporters"), action="store", type="character", default=NULL, help="Input candidate reporter list"),
     make_option(c("--germline"), action="store", type="character", default=NULL, help="Input germline bam file"),
     make_option(c("--followup"), action="store", type="character", default=NULL, help="Input followup bam file"),
@@ -41,8 +42,8 @@ option_list <- list(
     make_option(c("--min_vd"), action="store", type="numeric", default=15, help="Minimum alt depth for variant filtering"),
     make_option(c("--min_mq"), action="store", type="numeric", default=55, help="Minimum mapping quality for for variant filtering"),
     make_option(c("--min_qual"), action="store", type="numeric", default=45, help="Minimum average base quality for variant filtering"),
-    make_option(c("--min_sbf"), action="store", type="numeric", default=1e-10, help="Minimum Strand Bias Fisher p-value for variant filtering"),
-    make_option(c("--max_nm"), action="store", type="numeric", default=5, help="Maximum mean mismatches in reads for variant filtering"),
+    make_option(c("--min_sbf"), action="store", type="numeric", default=0, help="Minimum Strand Bias Fisher p-value for variant filtering"),
+    make_option(c("--max_nm"), action="store", type="numeric", default=6, help="Maximum mean mismatches in reads for variant filtering"),
     make_option(c("--read_min_bq"), action="store", type="numeric", default=30, help="Minimum base quality for read counts to be considered"),
     make_option(c("--read_min_mq"), action="store", type="numeric", default=30, help="Minimum mapping quality for read counts to be considered"),
     make_option(c("--read_max_dp"), action="store", type="numeric", default=20000, help="Maximum read depth above which sampling will happen")
@@ -99,7 +100,7 @@ if (opt$filter_reporters) {
             VD > opt$min_vd, 
             MQ > opt$min_mq,
             QUAL > opt$min_qual,
-            SBF > opt$min_sbf,
+            SBF >= opt$min_sbf,
             NM <= opt$max_nm
             ) %>%
         dplyr::select(CHROM, POS, ID, REF, ALT, QUAL, FILTER, AF, DP, GT, 
@@ -154,7 +155,7 @@ germline_readcounts <- purrr::pmap_dfr(list(
         return(dat)
     })
 
-# for every vcf reporter variant, get followup sample read counts.
+# For every vcf reporter variant, get followup sample read counts.
 followup_readcounts <- purrr::pmap_dfr(list(
     vcf$CHROM, vcf$POS, vcf$REF, vcf$ALT
     ), function(chr, pos, ref, alt) {
@@ -187,15 +188,19 @@ merged <- dplyr::bind_cols(vcf, germline_readcounts) %>%
 
 # final clean reporters after germline subtraction
 vcf_keep <- merged %>% 
-    dplyr::filter(germline_af < opt$germline_cutoff)
+    dplyr::filter(
+        germline_af < opt$germline_cutoff,
+        !blocklist_status %in% "blocklist"
+    )
 
 # Output final selected reporters
-write.table(vcf_keep, opt$retained, sep="\t", col.names=TRUE, row.names=FALSE, quote=FALSE)
+write.table(vcf_keep, opt$selected, sep="\t", col.names=TRUE, row.names=FALSE, quote=FALSE)
 
-# Output all the reporters (prior to germline subtraction)
+# Save all the reporters (prior to germline subtraction)
 write.table(merged, opt$all, sep="\t", col.names=TRUE, row.names=FALSE, quote=FALSE)
 
-# prepare columns for output vcf file containing final selected reporters
+# Prepare columns for output vcf file containing final selected reporters
+# Include DP and AF INFO
 vcf_dat <- vcf_keep %>% 
     dplyr::mutate(
         INFO = paste0("DP=", DP, ";", "AF=", AF),
@@ -204,7 +209,7 @@ vcf_dat <- vcf_keep %>%
         ) %>% 
     dplyr::select(CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO, FORMAT, SAMPLE) 
 
-# vcf header 
+# vcf header for vardict
 vcf_header <- paste0(
 '##fileformat=VCFv4.2', "\n",
 '##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">', "\n",
@@ -231,7 +236,7 @@ vcf_header <- paste0(
 )
 
 # write out vcf file with header
-file.create(opt$retained_vcf)
-cat(vcf_header, file = opt$retained_vcf, append = TRUE)
-cat(paste0("#", paste(names(vcf_dat), collapse = "\t"), "\n"), file = opt$retained_vcf, append = TRUE)
-write.table(vcfdat, opt$retained_vcf, row.names = FALSE, col.names = FALSE, sep = "\t", quote = FALSE, append = TRUE)
+file.create(opt$selected_vcf)
+cat(vcf_header, file = opt$selected_vcf, append = TRUE)
+cat(paste0("#", paste(names(vcf_dat), collapse = "\t"), "\n"), file = opt$selected_vcf, append = TRUE)
+write.table(vcf_dat, opt$selected_vcf, row.names = FALSE, col.names = FALSE, sep = "\t", quote = FALSE, append = TRUE)
