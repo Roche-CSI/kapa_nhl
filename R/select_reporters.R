@@ -30,7 +30,8 @@ option_list <- list(
     make_option(c("--reporters"), action="store", type="character", default=NULL, help="Input candidate reporter list"),
     make_option(c("--germline"), action="store", type="character", default=NULL, help="Input germline bam file"),
     make_option(c("--followup"), action="store", type="character", default=NULL, help="Input followup bam file"),
-    make_option(c("--retained"), action="store", type="character", default=NULL, help="Output final retained reporters after filtering"),
+    make_option(c("--selected"), action="store", type="character", default=NULL, help="Output txt file for final selected reporters after filtering"),
+    make_option(c("--selected_vcf"), action="store", type="character", default=NULL, help="Output vcf file for final selected reporters after filtering"),
     make_option(c("--all"), action="store", type="character", default=NULL, help="Output all reporters annotated with read count information"),
     make_option(c("--germline_cutoff"), action="store", type="numeric", default=NULL, help="Reporters with germline AF above this cutoff will be considered germline-positive"),
     make_option(c("--blocklist"), action="store", type="character", default=NULL, help="blocklist file, used for annotating reporters"),
@@ -40,7 +41,7 @@ option_list <- list(
     make_option(c("--min_vd"), action="store", type="numeric", default=15, help="Minimum alt depth for variant filtering"),
     make_option(c("--min_mq"), action="store", type="numeric", default=55, help="Minimum mapping quality for for variant filtering"),
     make_option(c("--min_qual"), action="store", type="numeric", default=45, help="Minimum average base quality for variant filtering"),
-    make_option(c("--min_sbf"), action="store", type="numeric", default=0.00001, help="Minimum Strand Bias Fisher p-value for variant filtering"),
+    make_option(c("--min_sbf"), action="store", type="numeric", default=1e-10, help="Minimum Strand Bias Fisher p-value for variant filtering"),
     make_option(c("--max_nm"), action="store", type="numeric", default=5, help="Maximum mean mismatches in reads for variant filtering"),
     make_option(c("--read_min_bq"), action="store", type="numeric", default=30, help="Minimum base quality for read counts to be considered"),
     make_option(c("--read_min_mq"), action="store", type="numeric", default=30, help="Minimum mapping quality for read counts to be considered"),
@@ -55,8 +56,14 @@ if (is.null(opt$reporters))
 
 # Main
 # --------------------------------------------------
-# Read input vcf table and filter
+# Read input vcf table from GATK VariantsToTable
 vcf <- read.table(opt$reporters, header=TRUE, sep='\t') 
+
+# remove samplename from GT columns
+names(vcf) <- gsub(".*\\.GT", "GT", names(vcf))
+names(vcf) <- gsub(".*\\.AD", "AD", names(vcf))
+names(vcf) <- gsub(".*\\.ALD", "ALD", names(vcf))
+names(vcf) <- gsub(".*\\.RD", "RD", names(vcf))
 
 vcf <- vcf %>% 
     dplyr::mutate_if(is.factor, as.character) %>%
@@ -95,11 +102,11 @@ if (opt$filter_reporters) {
             SBF > opt$min_sbf,
             NM <= opt$max_nm
             ) %>%
-        dplyr::select(CHROM, POS, REF, ALT, FILTER, AF, DP, 
+        dplyr::select(CHROM, POS, ID, REF, ALT, QUAL, FILTER, AF, DP, GT, 
             variant_id, baseline_ref, baseline_alt, baseline_af)
 } else {
     vcf <- vcf %>% 
-        dplyr::select(CHROM, POS, REF, ALT, FILTER, AF, DP, 
+        dplyr::select(CHROM, POS, ID, REF, ALT, QUAL, FILTER, AF, DP, GT,
             variant_id, baseline_ref, baseline_alt, baseline_af)
 }
 
@@ -187,3 +194,44 @@ write.table(vcf_keep, opt$retained, sep="\t", col.names=TRUE, row.names=FALSE, q
 
 # Output all the reporters (prior to germline subtraction)
 write.table(merged, opt$all, sep="\t", col.names=TRUE, row.names=FALSE, quote=FALSE)
+
+# prepare columns for output vcf file containing final selected reporters
+vcf_dat <- vcf_keep %>% 
+    dplyr::mutate(
+        INFO = paste0("DP=", DP, ";", "AF=", AF),
+        FORMAT = "GT:DP:AF",
+        SAMPLE = paste0(GT, ":", DP, ":", AF)
+        ) %>% 
+    dplyr::select(CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO, FORMAT, SAMPLE) 
+
+# vcf header 
+vcf_header <- paste0(
+'##fileformat=VCFv4.2', "\n",
+'##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">', "\n",
+'##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency">', "\n",
+'##FILTER=<ID=q22.5,Description="Mean Base Quality Below 22.5">', "\n",
+'##FILTER=<ID=Q10,Description="Mean Mapping Quality Below 10">', "\n",
+'##FILTER=<ID=p8,Description="Mean Position in Reads Less than 8">', "\n",
+'##FILTER=<ID=SN1.5,Description="Signal to Noise Less than 1.5">', "\n",
+'##FILTER=<ID=Bias,Description="Strand Bias">', "\n",
+'##FILTER=<ID=pSTD,Description="Position in Reads has STD of 0">', "\n",
+'##FILTER=<ID=d3,Description="Total Depth < 3">', "\n",
+'##FILTER=<ID=v2,Description="Var Depth < 2">', "\n",
+'##FILTER=<ID=f0.001,Description="Allele frequency < 0.001">', "\n",
+'##FILTER=<ID=MSI12,Description="Variant in MSI region with 12 non-monomer MSI or 13 monomer MSI">', "\n",
+'##FILTER=<ID=NM5.25,Description="Mean mismatches in reads >= 5.25, thus likely false positive">', "\n",
+'##FILTER=<ID=InGap,Description="The variant is in the deletion gap, thus likely false positive">', "\n",
+'##FILTER=<ID=InIns,Description="The variant is adjacent to an insertion variant">', "\n",
+'##FILTER=<ID=Cluster0bp,Description="Two variants are within 0 bp">', "\n",
+'##FILTER=<ID=LongMSI,Description="The somatic variant is flanked by long A/T (>=14)">', "\n",
+'##FILTER=<ID=AMPBIAS,Description="Indicate the variant has amplicon bias.">', "\n",
+'##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">', "\n",
+'##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Total Depth">', "\n",
+'##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele Frequency">', "\n"
+)
+
+# write out vcf file with header
+file.create(opt$retained_vcf)
+cat(vcf_header, file = opt$retained_vcf, append = TRUE)
+cat(paste0("#", paste(names(vcf_dat), collapse = "\t"), "\n"), file = opt$retained_vcf, append = TRUE)
+write.table(vcfdat, opt$retained_vcf, row.names = FALSE, col.names = FALSE, sep = "\t", quote = FALSE, append = TRUE)
