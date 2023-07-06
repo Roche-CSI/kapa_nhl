@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
-# This is the Main module for the KAPA NHL Analysis Pipeline. 
+# KAPA Bioinformatics Analysis for Longitudinal Detection of Circulating Tumor DNA
+
+# This is the Main module.
 # Includes FASTQ to UMI-deduped BAM to variant calls.
-# The Main module should be run for the baseline, germline, and followup samples prior to longitudinal analysis. 
+# This Main module should be run for the baseline, germline, and followup samples prior to longitudinal analysis. 
 
 
 # Convert FASTQ to BAM
