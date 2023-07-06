@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
 
+# KAPA Bioinformatics Analysis for Longitudinal Detection of Circulating Tumor DNA
+
 # This is the Longitudinal module for the KAPA NHL Analysis Pipeline. 
 # Uses the main module results of baseline, germline, and followup samples.
 # Includes blocklist generation to longitudinal mutation analysis
 
 
 # Generate background panel and blocklist 
-# (performed only once for the analysis workflow setup)
+# (performed only once for the longitudinal analysis workflow setup)
 # --------------------------------------
 Rscript create_bg_panel.R \
     --bam_list umi_deduped_sorted_bams.csv \
     --panel_background panel_background.RDS \
     --target_bed DESIGN_capture_targets.bed \
-    --blocklist_type variant \
+    --blist_type variant \
     --reference BSgenome.Hsapiens.UCSC.hg38
 
 Rscript create_blocklist.R \
@@ -31,7 +33,8 @@ Rscript select_reporters.R \
     --reporters BASELINE_SAMPLE_vardict_annotated.vcf.txt \
     --germline GERMLINE_SAMPLE_umi_deduped.clipov.sorted.bam \
     --followup FOLLOWUP_SAMPLE_umi_deduped.clipov.sorted.bam \
-    --retained selected_baseline_reporters.txt \
+    --selected selected_baseline_reporters.txt \
+    --selected_vcf selected_baseline_reporters.vcf \
     --all all_reporters.txt \
     --blocklist blocklist.txt \
     --germline_cutoff 0.0005 \
@@ -42,7 +45,7 @@ Rscript select_reporters.R \
     --min_mq 55 \
     --min_qual 45 \
     --min_sbf 0.00001 \
-    --max_nm 3 \
+    --max_nm 4 \
     --read_min_bq 30 \
     --read_min_mq 30 \
     --read_max_dp 20000
@@ -50,19 +53,18 @@ Rscript select_reporters.R \
 
 # Longitudinal Mutation Analysis
 # --------------------------------------
-Rscript longitudinal_analysis.R
+Rscript longitudinal_analysis.R \
     --reporters selected_baseline_reporters.txt \
     --sample_bam FOLLOWUP_SAMPLE_umi_deduped_clipov_sorted.bam \
-    --target_bed target.bed \
+    --target_bed DESIGN_capture_targets.bed \
     --blocklist blocklist.txt \
-    --blocklist_type variant \
+    --blist_type variant \
     --reads_threshold 1000 \
     --pvalue_threshold 0.001 \
     --vaf_threshold 0.1 \
     --read_min_bq 30 \
-    --read_min_mq 40 \
+    --read_min_mq 30 \
     --read_max_dp 20000 \
     --n_sim 10000 \
-    --output mrd.csv \
-    --reference BSgenome.Hsapiens.UCSC.hg38 \
-
+    --output longitudinal_evaluation.csv \
+    --reference BSgenome.Hsapiens.UCSC.hg38
