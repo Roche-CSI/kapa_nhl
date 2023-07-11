@@ -1,17 +1,21 @@
 # kapa_nhl
 
 ## Overview
-This repository contains the template scripts described in the [KAPA Bioinformatics Analysis for Longitudinal Detection of Circulating Tumor DNA](https://example.com) white paper. 
+This repository contains the template scripts described in the [KAPA Bioinformatics Analysis for Longitudinal Detection of Circulating Tumor DNA](https://sequencing.roche.com/content/dam/diagnostics_microsites/sequencing/master-blueprint/en/resources/pdfs/white-papers/kapa-bioinformatics-analysis-for-longitudinal-detection-of-circulating-tumor-dna-white-paper-mc--12095.pdf) analysis white paper. 
 
 The analysis covers the following modules:
 * `main.sh`: Main analysis (single-sample, FASTQ to BAM to variant calling). 
-* `longitudinal.sh`: Longitudinal analysis (multi-sample, longitudinal evaluation of mutations)
+* `longitudinal.sh`: Longitudinal analysis (multi-sample, longitudinal evaluation of mutations). Required scripts are in the `R` folder. 
+
+The application note [Longitudinal detection of non-Hodgkin lymphoma ctDNA](https://sequencing.roche.com/content/dam/diagnostics_microsites/sequencing/master-blueprint/en/resources/pdfs/white-papers/longitudinal-detection-of-circulating-tumor-dna-white-paper-mc--11981.pdf) provides an example of the analysis using the KAPA HyperCap Design Share non-Hodgkin lymphoma panel. 
+
+For more information on the KAPA HyperCap Design Share NHL panel, please refer to [https://sequencing.roche.com/global/en/products/group/kapa-hypercap-ds-nhl-panel.html](https://sequencing.roche.com/global/en/products/group/kapa-hypercap-ds-nhl-panel.html)
 
 ---
 
 ## Usage Tips
 
-These scripts are meant to serve as templates only. **For more usage details, please refer to the white paper.**
+These scripts are meant to serve as templates only. **For more usage details, please refer to the [analysis white paper](https://sequencing.roche.com/content/dam/diagnostics_microsites/sequencing/master-blueprint/en/resources/pdfs/white-papers/kapa-bioinformatics-analysis-for-longitudinal-detection-of-circulating-tumor-dna-white-paper-mc--12095.pdf).**
 
 The analysis scripts describes a number of steps and mini-workflows that use such third-party tools, which can be combined together into a variety of data analysis workflows for research.
 
@@ -46,7 +50,7 @@ The following tools are used:
 - SnpSift (4.3t) 
 - ctDNAtools (0.4.0)
 
-The following R packages are required for longitudinal analysis. 
+In addition, the following R packages are required for longitudinal analysis with ctDNAtools. 
 - R (≥3.6.0)
 - magrittr
 - dplyr (≥0.8.3)
